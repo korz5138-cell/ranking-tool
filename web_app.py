@@ -98,8 +98,12 @@ st.set_page_config(
 # セッションステート初期化
 if 'history' not in st.session_state:
     st.session_state.history = []          # list of dict(label, filename, png, ts)
-if 'results' not in st.session_state:
-    st.session_state.results = {}          # key=(file_id, design) -> dict
+if 'parsed' not in st.session_state:
+    st.session_state.parsed = {}           # file_id -> dict(ranking, auto_store, auto_date, parse_ok)
+if 'overrides' not in st.session_state:
+    st.session_state.overrides = {}        # file_id -> dict(store, date_full)  ※デザインを跨いで保持
+if 'pngs' not in st.session_state:
+    st.session_state.pngs = {}             # (file_id, design, store, date_full) -> png bytes
 
 st.title('🎰 差枚ランキング画像ジェネレーター')
 st.caption('Excel / CSV をアップロードするとランキング画像（PNG）を生成します。店舗名・日付は後から手動編集可能。')
@@ -171,28 +175,20 @@ if uploaded:
         with st.container(border=True):
             st.markdown(f'### {uf.name}')
 
-            cache_key = f'{uf.file_id}_{design}'
-            data = st.session_state.results.get(cache_key)
+            fid = uf.file_id
 
-            # 初回 or デザイン切替時: パース + 初回生成
-            if data is None:
+            # 1) パース＋データ読込（ファイル毎に1回・デザイン非依存）
+            if fid not in st.session_state.parsed:
                 try:
                     ranking, auto_store, auto_date, parse_ok = parse_and_load(uf)
                     if not ranking:
                         raise ValueError('ランキング対象データが0件です（フォーマットを確認してください）')
-                    initial_store = auto_store or ''
-                    initial_date = auto_date
-                    png_init = None
-                    if initial_store:
-                        png_init = render_to_png(ranking, initial_date, initial_store, design)
-                    st.session_state.results[cache_key] = {
+                    st.session_state.parsed[fid] = {
                         'ranking': ranking,
-                        'store': initial_store,
-                        'date_full': initial_date,
-                        'png': png_init,
+                        'auto_store': auto_store,
+                        'auto_date': auto_date,
                         'parse_ok': parse_ok,
                     }
-                    data = st.session_state.results[cache_key]
                 except Exception as e:
                     st.error(f'読み込み失敗: {e}')
                     with st.expander('詳細トレースバック'):
@@ -200,11 +196,32 @@ if uploaded:
                     fail += 1
                     continue
 
-            store = data['store']
-            date_full = data['date_full']
-            png = data['png']
-            parse_ok = data['parse_ok']
+            info = st.session_state.parsed[fid]
 
+            # 2) 表示用の店舗名・日付（手動上書きが優先）
+            override = st.session_state.overrides.get(fid, {})
+            store = override.get('store', info['auto_store'])
+            date_full = override.get('date_full', info['auto_date'])
+            parse_ok = info['parse_ok'] or bool(override)
+
+            # 3) 画像生成（同じ条件はキャッシュ再利用）
+            png = None
+            if store:
+                png_key = (fid, design, store, date_full)
+                if png_key in st.session_state.pngs:
+                    png = st.session_state.pngs[png_key]
+                else:
+                    try:
+                        png = render_to_png(info['ranking'], date_full, store, design)
+                        st.session_state.pngs[png_key] = png
+                    except Exception as e:
+                        st.error(f'画像生成失敗: {e}')
+                        with st.expander('詳細トレースバック'):
+                            st.code(traceback.format_exc())
+                        fail += 1
+                        continue
+
+            # 4) プレビュー＋ダウンロード
             if png is not None and store:
                 fname = f'{date_full[4:]}_{store}.png'
                 label = f'{store}　{date_full[:4]}-{date_full[4:6]}-{date_full[6:8]}　({design})'
@@ -214,7 +231,7 @@ if uploaded:
                     st.image(png, caption=label)
                 with col2:
                     if not parse_ok:
-                        st.info('ℹ️ ファイル名から自動検出できなかったため、下記で店舗名・日付を入力済みです。確認・修正後に再生成してください。')
+                        st.info('ℹ️ ファイル名から自動検出できませんでした。下記で店舗名・日付を入力してください。')
                     else:
                         st.success('生成成功')
                     st.download_button(
@@ -222,41 +239,42 @@ if uploaded:
                         data=png,
                         file_name=fname,
                         mime='image/png',
-                        key=f'dl_{cache_key}',
+                        key=f'dl_{fid}_{design}',
                         use_container_width=True,
                     )
                     st.code(fname, language=None)
 
-                # 履歴 + ZIP集約
                 _add_history(label, fname, png)
                 success_items.append((fname, png))
-            else:
-                if not store:
-                    st.warning('⚠️ 店舗名が空です。下記フォームで入力してください。')
+            elif not store:
+                st.warning('⚠️ 店舗名が未入力です。下記フォームで入力してください。')
 
-            # 編集フォーム（auto-parse失敗 or 空店舗のときは自動展開）
-            with st.expander('✏️ 店舗名・日付を変更', expanded=(not parse_ok or not store)):
+            # 5) 編集フォーム（店舗名・日付の上書き入力）
+            with st.expander(
+                '✏️ 店舗名・日付を変更',
+                expanded=(not parse_ok or not store),
+            ):
                 ec1, ec2, ec3 = st.columns([3, 2, 1])
                 with ec1:
                     new_store = st.text_input(
                         '店舗名',
                         value=store,
-                        key=f'store_input_{cache_key}',
+                        key=f'store_input_{fid}',
                         placeholder='例: ピーアーク北千住',
                     )
                 with ec2:
                     new_date = st.date_input(
                         '日付',
                         value=_date_full_to_date(date_full),
-                        key=f'date_input_{cache_key}',
+                        key=f'date_input_{fid}',
                         format='YYYY/MM/DD',
                     )
                 with ec3:
-                    st.write('')  # 揃え用スペーサー
+                    st.write('')
                     st.write('')
                     regen = st.button(
-                        '🔄 再生成',
-                        key=f'regen_{cache_key}',
+                        '🔄 反映',
+                        key=f'regen_{fid}',
                         use_container_width=True,
                         type='primary',
                     )
@@ -266,20 +284,12 @@ if uploaded:
                     if not new_store_clean:
                         st.error('店舗名を入力してください')
                     else:
-                        try:
-                            new_date_full = new_date.strftime('%Y%m%d')
-                            new_png = render_to_png(
-                                data['ranking'], new_date_full, new_store_clean, design,
-                            )
-                            data['store'] = new_store_clean
-                            data['date_full'] = new_date_full
-                            data['png'] = new_png
-                            data['parse_ok'] = True   # 手動入力済みフラグ
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f'再生成失敗: {e}')
-                            with st.expander('詳細トレースバック'):
-                                st.code(traceback.format_exc())
+                        new_date_full = new_date.strftime('%Y%m%d')
+                        st.session_state.overrides[fid] = {
+                            'store': new_store_clean,
+                            'date_full': new_date_full,
+                        }
+                        st.rerun()
 
     st.divider()
     success = len(success_items)
@@ -305,8 +315,10 @@ if uploaded:
         )
 
 else:
-    # アップロード前: 結果キャッシュをクリア
-    st.session_state.results = {}
+    # アップロード前: 結果キャッシュをクリア（手動入力もリセット）
+    st.session_state.parsed = {}
+    st.session_state.overrides = {}
+    st.session_state.pngs = {}
     st.info('左上のボックスからファイルをドラッグ＆ドロップしてください。')
 
     with st.expander('対応ファイル名フォーマット', expanded=False):
