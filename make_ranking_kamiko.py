@@ -217,12 +217,27 @@ def clean_studio_name(n):
     return s.strip(' /')
 
 
-def _find_header_columns(ws):
-    """シート内から '台番' '機種名' '差' を含むヘッダー行を検出し、
-    (header_row_1based, col_dai, col_name, col_diff, col_bb, col_rb) を返す。
-    col_bb / col_rb は無ければ None。検出失敗時は (None,)*6。
+def _classify_diff_label(label: str) -> str | None:
+    """差分列ラベルが「プレイヤー視点（セーフ-アウト, +=客勝ち）」か
+    「店側視点（アウト-セーフ, +=店勝ち）」かを判定。
+    括弧書きの注釈（"(自動計算)" 等）は除去して判定する。
+    return: 'player' / 'shop' / None
     """
-    DIFF_LABELS = {'差', '差１', '差1', '差枚', '差枚数'}
+    if not label:
+        return None
+    s = re.sub(r'[（(].*?[)）]', '', str(label)).strip()
+    if s in ('差枚', '差枚数'):
+        return 'player'   # セーフ - アウト
+    if s in ('差', '差１', '差1'):
+        return 'shop'     # アウト - セーフ
+    return None
+
+
+def _find_header_columns(ws):
+    """シート内から '台番' '機種名' '差(枚)' を含むヘッダー行を検出し、
+    (header_row_1based, col_dai, col_name, col_diff, col_bb, col_rb, diff_kind) を返す。
+    diff_kind は 'player' / 'shop'。検出失敗時は (None,)*7。
+    """
     BB_LABELS = {'BB', 'BB回数', 'ＢＢ'}
     RB_LABELS = {'RB', 'RB回数', 'ＲＢ'}
     for i, r in enumerate(ws.iter_rows(values_only=True), start=1):
@@ -230,6 +245,7 @@ def _find_header_columns(ws):
             continue
         cells = list(r)
         col_dai = col_name = col_diff = col_bb = col_rb = None
+        diff_kind = None
         for j, c in enumerate(cells):
             if not isinstance(c, str):
                 continue
@@ -238,15 +254,18 @@ def _find_header_columns(ws):
                 col_dai = j
             elif cs == '機種名' and col_name is None:
                 col_name = j
-            elif cs in DIFF_LABELS and col_diff is None:
-                col_diff = j
             elif cs in BB_LABELS and col_bb is None:
                 col_bb = j
             elif cs in RB_LABELS and col_rb is None:
                 col_rb = j
+            elif col_diff is None:
+                kind = _classify_diff_label(cs)
+                if kind is not None:
+                    col_diff = j
+                    diff_kind = kind
         if col_dai is not None and col_name is not None and col_diff is not None:
-            return i, col_dai, col_name, col_diff, col_bb, col_rb
-    return None, None, None, None, None, None
+            return i, col_dai, col_name, col_diff, col_bb, col_rb, diff_kind
+    return None, None, None, None, None, None, None
 
 
 def _count_data_rows(ws, header_row, col_dai, col_name):
@@ -279,34 +298,38 @@ def _to_int(v):
 
 
 def load_ranking_studio_xlsx(path):
-    """神の子取材系 xlsx（差 = アウト-セーフ）
-    シート構成・列位置のばらつきに対応するため、各シートをスキャンして:
+    """神の子取材系 xlsx ローダー（複数シート・列位置のばらつきに対応）
+
+    シート選択:
       - 'S' シートが存在し有効データを持つなら最優先
-      - そうでなければ「有効データ行が最多」のシートを選択（集計/まとめシートは行数で自然に除外）
-    BB/RB 列が見つかれば抽出してデザイン側で表示する。
+      - そうでなければ「有効データ行が最多」のシートを選択
+    差枚の符号:
+      - 列ラベルが '差' / '差１' / '差1' → 店側視点（アウト-セーフ）→ プレイヤー視点に反転
+      - 列ラベルが '差枚' / '差枚数' / '差枚(自動計算)' 等 → 既にプレイヤー視点 → そのまま
+    BB/RB 列があれば抽出。
     """
     wb = openpyxl.load_workbook(path, data_only=True)
 
     # 各シートを評価
-    candidates = []  # (priority, count, ws, header_row, col_dai, col_name, col_diff, col_bb, col_rb)
+    candidates = []  # (priority, count, ws, header_row, cd, cn, cf, cb, cr, diff_kind)
     for sn in wb.sheetnames:
         ws = wb[sn]
-        hr, cd, cn, cf, cb, cr = _find_header_columns(ws)
+        hr, cd, cn, cf, cb, cr, dk = _find_header_columns(ws)
         if hr is None:
             continue
         count = _count_data_rows(ws, hr, cd, cn)
-        # 'S' シートは最優先（priority=2）。それ以外はデータ行数で選ぶ（priority=1）
         priority = 2 if sn == 'S' else 1
-        candidates.append((priority, count, ws, hr, cd, cn, cf, cb, cr))
+        candidates.append((priority, count, ws, hr, cd, cn, cf, cb, cr, dk))
 
     if not candidates:
         raise ValueError(
-            f'ヘッダー行を検出できません（台番・機種名・差 の3列が見つからない）: '
+            f'ヘッダー行を検出できません（台番・機種名・差/差枚 の3列が見つからない）: '
             f'{os.path.basename(path)}')
 
     # priority 降順 → count 降順
     candidates.sort(key=lambda x: (-x[0], -x[1]))
-    _, _, chosen_ws, header_row, col_dai, col_name, col_diff, col_bb, col_rb = candidates[0]
+    (_, _, chosen_ws, header_row, col_dai, col_name, col_diff,
+     col_bb, col_rb, diff_kind) = candidates[0]
 
     max_col = max(c for c in (col_dai, col_name, col_diff, col_bb, col_rb) if c is not None)
     rows = []
@@ -324,7 +347,9 @@ def load_ranking_studio_xlsx(path):
             dai = int(dai_v)
         except (TypeError, ValueError):
             continue
-        samai = -_to_int(diff_v)  # 差 = アウト-セーフ → プレイヤー視点の差枚
+        raw_diff = _to_int(diff_v)
+        # 列ラベルの符号規約に合わせてプレイヤー視点に統一
+        samai = raw_diff if diff_kind == 'player' else -raw_diff
         row = {
             'dai':   dai,
             'name':  resolve_model_name(name_v),

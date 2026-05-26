@@ -149,7 +149,16 @@ if uploaded:
         with st.container(border=True):
             st.markdown(f'### {uf.name}')
             try:
-                png, fname, label = generate_png(uf, design)
+                try:
+                    png, fname, label = generate_png(uf, design)
+                except ValueError as ve:
+                    if 'unsupported filename pattern' in str(ve):
+                        raise ValueError(
+                            'ファイル名から店舗/日付が読み取れません。'
+                            'ファイル名を「【店舗名】MMDD_元のファイル名.xlsx」'
+                            'のようにリネームしてから再アップロードしてください。'
+                        ) from ve
+                    raise
                 col1, col2 = st.columns([3, 2])
                 with col1:
                     st.image(png, caption=label)
@@ -207,10 +216,23 @@ else:
         st.markdown('''
 **xlsx**
 - `YYYYMMDD_店舗名_20S.xlsx`（標準）
-- `【店舗】【M.D】【神の子来店】S結果.xlsx`（神の子スタジオ形式・BB/RB省略）
+- `【店舗】【M.D】【神の子来店】S結果.xlsx`（神の子取材系）
+- `【店舗】MMDD神の子...xlsx` / `【店舗】M.D...xlsx`
+- `店舗名YYYY.M.D...xlsx` / `2026.5.10 神の子来店 店舗名.xlsx`
 
 **CSV**
 - `店舗名(20S)_YYYY-MM-DD_全台.csv`
 - `店舗名YYYY-MM-DD_全台.csv`
 - 先頭日付プレフィックス（例: `2025.5:9...`, `2025-11-8...`）も自動認識
+
+**📝 ファイル名に店舗/日付がないテンプレート（例: `S級ホール調査結果報告シート.xlsx`）の場合**
+
+アップロード前にファイル名を以下のようにリネームしてください：
+- `【店舗名】MMDD_元のファイル名.xlsx`
+- 例: `【新城】0429_S級ホール調査結果報告シート.xlsx`
+
+**ピーアーク系列の自動補完**
+
+地域名だけでも正式店舗名に変換されます（例: `北千住` → `ピーアーク北千住`）。
+未登録の店舗があれば管理者にご連絡ください。
 ''')
