@@ -863,15 +863,22 @@ def parse_filename(path):
         mo, d = int(m.group(2)), int(m.group(3))
         year = datetime.now().year
         return f'{year}{mo:02d}{d:02d}', resolve_store_name(store)
+    # スタジオ形式A2: 【店舗】YYYY.M.D... （年付き・区切りドット）
+    m = re.match(r'^【([^】]+)】\s*(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})', base)
+    if m:
+        store = STUDIO_ALIAS.get(m.group(1), m.group(1))
+        y, mo, d = int(m.group(2)), int(m.group(3)), int(m.group(4))
+        return f'{y}{mo:02d}{d:02d}', resolve_store_name(store)
     # スタジオ形式B: 【店舗】MMDD神の子... または 【店舗】MMDD...
-    m = re.match(r'^【([^】]+)】(\d{2})(\d{2})', base)
+    # ※ A2 より後に評価することで YYYY.M.D を MMDD と誤検出しないようにする
+    m = re.match(r'^【([^】]+)】(\d{2})(\d{2})(?![\d.])', base)
     if m:
         store = STUDIO_ALIAS.get(m.group(1), m.group(1))
         mo, d = int(m.group(2)), int(m.group(3))
         year = datetime.now().year
         return f'{year}{mo:02d}{d:02d}', resolve_store_name(store)
-    # スタジオ形式C: 【店舗】M.D... （日付に【】なし、区切りはドット）
-    m = re.match(r'^【([^】]+)】\s*(\d{1,2})\.(\d{1,2})', base)
+    # スタジオ形式C: 【店舗】M.D... （日付に【】なし、区切りはドット、年なし）
+    m = re.match(r'^【([^】]+)】\s*(\d{1,2})\.(\d{1,2})(?!\d)', base)
     if m:
         store = STUDIO_ALIAS.get(m.group(1), m.group(1))
         mo, d = int(m.group(2)), int(m.group(3))
