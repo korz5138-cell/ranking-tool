@@ -150,7 +150,7 @@ def short_name(n):
 
 
 def load_ranking_xlsx(xlsx):
-    wb = openpyxl.load_workbook(xlsx, data_only=True, read_only=True)
+    wb = openpyxl.load_workbook(xlsx, data_only=True)
     try:
         ws = wb[wb.sheetnames[0]]
         rows = [r for r in ws.iter_rows(min_row=2, values_only=True)
@@ -311,7 +311,7 @@ def load_ranking_studio_xlsx(path):
       - 列ラベルが '差枚' / '差枚数' / '差枚(自動計算)' 等 → 既にプレイヤー視点 → そのまま
     BB/RB 列があれば抽出。
     """
-    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    wb = openpyxl.load_workbook(path, data_only=True)
     rows = []
     try:
         # 各シートを評価
