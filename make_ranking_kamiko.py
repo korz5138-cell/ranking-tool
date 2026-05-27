@@ -11,12 +11,16 @@ from datetime import datetime
 import openpyxl
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
+_BUNDLED_VF = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'fonts', 'NotoSansJP-VF.ttf')
+
+
 def _resolve_jp_fonts():
     """日本語フォントを weight 別に検出する。
-    1) macOS のヒラギノを直接指定
-    2) Linux: /usr/share/fonts 配下から CJK 系を glob 検索
-       見つからなければ任意フォントを使用
-    戻り値: dict {'Black': path, 'Bold': ..., 'Medium': ..., 'Round': ...}
+    優先順位:
+      1) macOS のヒラギノ（各 weight 別ファイル）
+      2) リポジトリ同梱の Noto Sans JP variable font（"パス|weight名"形式）
+      3) Linux: /usr/share/fonts 配下を glob で探索
     """
     mac = {
         'Black':  '/System/Library/Fonts/ヒラギノ角ゴシック W9.ttc',
@@ -27,37 +31,41 @@ def _resolve_jp_fonts():
     if all(os.path.exists(p) for p in mac.values()):
         return mac
 
+    # 同梱 variable font（"パス|weight名" で font() ヘルパが variation 適用）
+    if os.path.exists(_BUNDLED_VF):
+        return {
+            'Black':  f'{_BUNDLED_VF}|Black',
+            'Bold':   f'{_BUNDLED_VF}|Bold',
+            'Medium': f'{_BUNDLED_VF}|Medium',
+            'Round':  f'{_BUNDLED_VF}|Regular',
+        }
+
+    # OS の CJK フォントを glob で検索（最終手段）
     found = []
     for pat in (
         '/usr/share/fonts/opentype/noto/*CJK*.ttc',
         '/usr/share/fonts/truetype/noto/*CJK*.ttc',
         '/usr/share/fonts/opentype/noto-cjk/*.ttc',
-        '/usr/share/fonts/opentype/**/Noto*.ttc',
-        '/usr/share/fonts/truetype/**/Noto*.ttc',
         '/usr/share/fonts/**/NotoSans*JP*.otf',
         '/usr/share/fonts/**/NotoSansCJK*.otf',
         '/usr/share/fonts/**/*ipaex*.ttf',
-        '/usr/share/fonts/**/*ipag*.ttf',
-        '/usr/share/fonts/**/Takao*.ttf',
     ):
         found.extend(glob.glob(pat, recursive=True))
     found = sorted(set(found))
-
-    def pick(*keywords):
-        for kw in keywords:
-            for p in found:
-                if kw.lower() in os.path.basename(p).lower():
-                    return p
-        return found[0] if found else None
-
     if found:
+        def pick(*kws):
+            for kw in kws:
+                for p in found:
+                    if kw.lower() in os.path.basename(p).lower():
+                        return p
+            return found[0]
         return {
-            'Black':  pick('Black', 'Heavy', 'Bold') or found[0],
-            'Bold':   pick('Bold', 'Black') or found[0],
-            'Medium': pick('Medium', 'Regular') or found[0],
-            'Round':  pick('Regular', 'Medium') or found[0],
+            'Black':  pick('Black', 'Heavy', 'Bold'),
+            'Bold':   pick('Bold', 'Black'),
+            'Medium': pick('Medium', 'Regular'),
+            'Round':  pick('Regular', 'Medium'),
         }
-    return mac   # 最終的に存在しなくても PIL が分かるエラーを出してくれる
+    return mac   # 最終的に PIL が cannot open resource を出す（デバッグしやすい）
 
 
 _FONTS = _resolve_jp_fonts()
@@ -66,7 +74,20 @@ FONT_BOLD  = _FONTS['Bold']
 FONT_MED   = _FONTS['Medium']
 FONT_ROUND = _FONTS['Round']
 
-def font(p, s): return ImageFont.truetype(p, s)
+def font(p, s):
+    """ImageFont を生成。パスが '<path>|<variation>' 形式なら
+    variable font の weight 軸を指定して読み込む。
+    """
+    p = str(p)
+    if '|' in p:
+        path, var_name = p.split('|', 1)
+        f = ImageFont.truetype(path, s)
+        try:
+            f.set_variation_by_name(var_name)
+        except Exception:
+            pass   # 非 variable font の場合は無視して既定 weight
+        return f
+    return ImageFont.truetype(p, s)
 
 
 # ===== 機種名マッピング =====

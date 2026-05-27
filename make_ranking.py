@@ -8,8 +8,12 @@ import glob
 import openpyxl
 from PIL import Image, ImageDraw, ImageFont
 
+_BUNDLED_VF = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'fonts', 'NotoSansJP-VF.ttf')
+
+
 def _resolve_jp_fonts():
-    """日本語フォントを検出。macOS→Linux glob fallback。"""
+    """日本語フォントを検出。macOS→同梱VF→Linux glob fallback。"""
     mac = {
         'Black':  '/System/Library/Fonts/ヒラギノ角ゴシック W9.ttc',
         'Bold':   '/System/Library/Fonts/ヒラギノ角ゴシック W8.ttc',
@@ -17,30 +21,34 @@ def _resolve_jp_fonts():
     }
     if all(os.path.exists(p) for p in mac.values()):
         return mac
+    if os.path.exists(_BUNDLED_VF):
+        return {
+            'Black':  f'{_BUNDLED_VF}|Black',
+            'Bold':   f'{_BUNDLED_VF}|Bold',
+            'Medium': f'{_BUNDLED_VF}|Medium',
+        }
     found = []
     for pat in (
         '/usr/share/fonts/opentype/noto/*CJK*.ttc',
         '/usr/share/fonts/truetype/noto/*CJK*.ttc',
         '/usr/share/fonts/opentype/noto-cjk/*.ttc',
-        '/usr/share/fonts/opentype/**/Noto*.ttc',
-        '/usr/share/fonts/truetype/**/Noto*.ttc',
         '/usr/share/fonts/**/NotoSans*JP*.otf',
         '/usr/share/fonts/**/NotoSansCJK*.otf',
         '/usr/share/fonts/**/*ipaex*.ttf',
     ):
         found.extend(glob.glob(pat, recursive=True))
     found = sorted(set(found))
-    def pick(*keywords):
-        for kw in keywords:
-            for p in found:
-                if kw.lower() in os.path.basename(p).lower():
-                    return p
-        return found[0] if found else None
     if found:
+        def pick(*kws):
+            for kw in kws:
+                for p in found:
+                    if kw.lower() in os.path.basename(p).lower():
+                        return p
+            return found[0]
         return {
-            'Black':  pick('Black', 'Heavy', 'Bold') or found[0],
-            'Bold':   pick('Bold', 'Black') or found[0],
-            'Medium': pick('Medium', 'Regular') or found[0],
+            'Black':  pick('Black', 'Heavy', 'Bold'),
+            'Bold':   pick('Bold', 'Black'),
+            'Medium': pick('Medium', 'Regular'),
         }
     return mac
 
@@ -50,7 +58,19 @@ FONT_HEAVY = _FONTS['Black']
 FONT_BOLD  = _FONTS['Bold']
 FONT_MED   = _FONTS['Medium']
 
-def font(p, s): return ImageFont.truetype(p, s)
+
+def font(p, s):
+    """variable font の '<path>|<variation>' 形式に対応した ImageFont 生成。"""
+    p = str(p)
+    if '|' in p:
+        path, var_name = p.split('|', 1)
+        f = ImageFont.truetype(path, s)
+        try:
+            f.set_variation_by_name(var_name)
+        except Exception:
+            pass
+        return f
+    return ImageFont.truetype(p, s)
 
 
 def short_name(n):
