@@ -151,12 +151,9 @@ def short_name(n):
 
 def load_ranking_xlsx(xlsx):
     wb = openpyxl.load_workbook(xlsx, data_only=True)
-    try:
-        ws = wb[wb.sheetnames[0]]
-        rows = [r for r in ws.iter_rows(min_row=2, values_only=True)
-                if r and r[0] is not None]
-    finally:
-        wb.close()
+    ws = wb[wb.sheetnames[0]]
+    rows = [r for r in ws.iter_rows(min_row=2, values_only=True)
+            if r and r[0] is not None]
     rows.sort(key=lambda r: -(r[3] or 0))
     return [{
         'dai':   int(r[0]),
@@ -312,59 +309,57 @@ def load_ranking_studio_xlsx(path):
     BB/RB 列があれば抽出。
     """
     wb = openpyxl.load_workbook(path, data_only=True)
+
+    # 各シートを評価
+    candidates = []  # (priority, count, ws, header_row, cd, cn, cf, cb, cr, diff_kind)
+    for sn in wb.sheetnames:
+        ws = wb[sn]
+        hr, cd, cn, cf, cb, cr, dk = _find_header_columns(ws)
+        if hr is None:
+            continue
+        count = _count_data_rows(ws, hr, cd, cn)
+        priority = 2 if sn == 'S' else 1
+        candidates.append((priority, count, ws, hr, cd, cn, cf, cb, cr, dk))
+
+    if not candidates:
+        raise ValueError(
+            f'ヘッダー行を検出できません（台番・機種名・差/差枚 の3列が見つからない）: '
+            f'{os.path.basename(path)}')
+
+    # priority 降順 → count 降順
+    candidates.sort(key=lambda x: (-x[0], -x[1]))
+    (_, _, chosen_ws, header_row, col_dai, col_name, col_diff,
+     col_bb, col_rb, diff_kind) = candidates[0]
+
+    max_col = max(c for c in (col_dai, col_name, col_diff, col_bb, col_rb) if c is not None)
     rows = []
-    try:
-        # 各シートを評価
-        candidates = []  # (priority, count, ws, header_row, cd, cn, cf, cb, cr, diff_kind)
-        for sn in wb.sheetnames:
-            ws = wb[sn]
-            hr, cd, cn, cf, cb, cr, dk = _find_header_columns(ws)
-            if hr is None:
-                continue
-            count = _count_data_rows(ws, hr, cd, cn)
-            priority = 2 if sn == 'S' else 1
-            candidates.append((priority, count, ws, hr, cd, cn, cf, cb, cr, dk))
-
-        if not candidates:
-            raise ValueError(
-                f'ヘッダー行を検出できません（台番・機種名・差/差枚 の3列が見つからない）: '
-                f'{os.path.basename(path)}')
-
-        # priority 降順 → count 降順
-        candidates.sort(key=lambda x: (-x[0], -x[1]))
-        (_, _, chosen_ws, header_row, col_dai, col_name, col_diff,
-         col_bb, col_rb, diff_kind) = candidates[0]
-
-        max_col = max(c for c in (col_dai, col_name, col_diff, col_bb, col_rb) if c is not None)
-        for r in chosen_ws.iter_rows(min_row=header_row + 1, values_only=True):
-            if not r or len(r) <= max_col:
-                continue
-            dai_v = r[col_dai]
-            name_v = r[col_name]
-            diff_v = r[col_diff]
-            if dai_v is None or name_v is None:
-                continue
-            if isinstance(name_v, str) and name_v.strip() in ('停止台', ''):
-                continue
-            try:
-                dai = int(dai_v)
-            except (TypeError, ValueError):
-                continue
-            raw_diff = _to_int(diff_v)
-            # 列ラベルの符号規約に合わせてプレイヤー視点に統一
-            samai = raw_diff if diff_kind == 'player' else -raw_diff
-            row = {
-                'dai':   dai,
-                'name':  resolve_model_name(name_v),
-                'samai': samai,
-            }
-            if col_bb is not None:
-                row['bb'] = _to_int(r[col_bb])
-            if col_rb is not None:
-                row['rb'] = _to_int(r[col_rb])
-            rows.append(row)
-    finally:
-        wb.close()
+    for r in chosen_ws.iter_rows(min_row=header_row + 1, values_only=True):
+        if not r or len(r) <= max_col:
+            continue
+        dai_v = r[col_dai]
+        name_v = r[col_name]
+        diff_v = r[col_diff]
+        if dai_v is None or name_v is None:
+            continue
+        if isinstance(name_v, str) and name_v.strip() in ('停止台', ''):
+            continue
+        try:
+            dai = int(dai_v)
+        except (TypeError, ValueError):
+            continue
+        raw_diff = _to_int(diff_v)
+        # 列ラベルの符号規約に合わせてプレイヤー視点に統一
+        samai = raw_diff if diff_kind == 'player' else -raw_diff
+        row = {
+            'dai':   dai,
+            'name':  resolve_model_name(name_v),
+            'samai': samai,
+        }
+        if col_bb is not None:
+            row['bb'] = _to_int(r[col_bb])
+        if col_rb is not None:
+            row['rb'] = _to_int(r[col_rb])
+        rows.append(row)
     rows.sort(key=lambda x: -x['samai'])
     return rows[:10]
 

@@ -9,7 +9,6 @@
 """
 from __future__ import annotations
 
-import gc
 import io
 import os
 import sys
@@ -171,24 +170,11 @@ def _add_history(label, fname, png):
 
 
 if uploaded:
-    # 一度に大量にアップロードするとメモリ不足でクラッシュしやすいので警告
-    BATCH_WARN_THRESHOLD = 15
-    if len(uploaded) > BATCH_WARN_THRESHOLD:
-        st.warning(
-            f'⚠️ 一度に {len(uploaded)} 件アップロードされています。'
-            f'サーバーのメモリ制限（約1GB）を超えてクラッシュする可能性があります。'
-            f'{BATCH_WARN_THRESHOLD} 件以下に分けることをおすすめします。'
-        )
-
     st.write(f'**{len(uploaded)} 件**のファイルを処理します。')
     success_items: list[tuple[str, bytes]] = []
     fail = 0
 
-    # 進捗表示
-    prog_bar = st.progress(0.0, text='処理開始…')
-
     for i, uf in enumerate(uploaded, start=1):
-        prog_bar.progress((i - 1) / len(uploaded), text=f'処理中 {i}/{len(uploaded)}: {uf.name}')
         with st.container(border=True):
             st.markdown(f'### {uf.name}')
 
@@ -197,8 +183,7 @@ if uploaded:
             # 1) パース＋データ読込（ファイル毎に1回・デザイン非依存）
             if fid not in st.session_state.parsed:
                 try:
-                    with st.spinner(f'読み込み中…'):
-                        ranking, auto_store, auto_date, parse_ok = parse_and_load(uf)
+                    ranking, auto_store, auto_date, parse_ok = parse_and_load(uf)
                     if not ranking:
                         raise ValueError('ランキング対象データが0件です（フォーマットを確認してください）')
                     st.session_state.parsed[fid] = {
@@ -207,12 +192,6 @@ if uploaded:
                         'auto_date': auto_date,
                         'parse_ok': parse_ok,
                     }
-                    # openpyxl の Workbook オブジェクト等を確実に解放
-                    gc.collect()
-                except MemoryError:
-                    st.error('💥 メモリ不足: アップロード件数を減らして再試行してください')
-                    fail += 1
-                    continue
                 except Exception as e:
                     st.error(f'読み込み失敗: {e}')
                     with st.expander('詳細トレースバック'):
@@ -236,9 +215,7 @@ if uploaded:
                     png = st.session_state.pngs[png_key]
                 else:
                     try:
-                        with st.spinner('画像生成中…'):
-                            png = render_to_png(info['ranking'], date_full, store, design)
-                        gc.collect()
+                        png = render_to_png(info['ranking'], date_full, store, design)
                         st.session_state.pngs[png_key] = png
                     except Exception as e:
                         st.error(f'画像生成失敗: {e}')
@@ -317,7 +294,6 @@ if uploaded:
                         }
                         st.rerun()
 
-    prog_bar.progress(1.0, text=f'完了 ({len(uploaded)} 件)')
     st.divider()
     success = len(success_items)
     if fail == 0 and success == len(uploaded):
