@@ -8,32 +8,47 @@ import glob
 import openpyxl
 from PIL import Image, ImageDraw, ImageFont
 
-def _find_font(*candidates):
-    for path in candidates:
-        if path and os.path.exists(path):
-            return path
-    return candidates[-1] if candidates else None
+def _resolve_jp_fonts():
+    """日本語フォントを検出。macOS→Linux glob fallback。"""
+    mac = {
+        'Black':  '/System/Library/Fonts/ヒラギノ角ゴシック W9.ttc',
+        'Bold':   '/System/Library/Fonts/ヒラギノ角ゴシック W8.ttc',
+        'Medium': '/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc',
+    }
+    if all(os.path.exists(p) for p in mac.values()):
+        return mac
+    found = []
+    for pat in (
+        '/usr/share/fonts/opentype/noto/*CJK*.ttc',
+        '/usr/share/fonts/truetype/noto/*CJK*.ttc',
+        '/usr/share/fonts/opentype/noto-cjk/*.ttc',
+        '/usr/share/fonts/opentype/**/Noto*.ttc',
+        '/usr/share/fonts/truetype/**/Noto*.ttc',
+        '/usr/share/fonts/**/NotoSans*JP*.otf',
+        '/usr/share/fonts/**/NotoSansCJK*.otf',
+        '/usr/share/fonts/**/*ipaex*.ttf',
+    ):
+        found.extend(glob.glob(pat, recursive=True))
+    found = sorted(set(found))
+    def pick(*keywords):
+        for kw in keywords:
+            for p in found:
+                if kw.lower() in os.path.basename(p).lower():
+                    return p
+        return found[0] if found else None
+    if found:
+        return {
+            'Black':  pick('Black', 'Heavy', 'Bold') or found[0],
+            'Bold':   pick('Bold', 'Black') or found[0],
+            'Medium': pick('Medium', 'Regular') or found[0],
+        }
+    return mac
 
 
-# macOS（ヒラギノ）→ Linux（Noto Sans CJK）の順
-FONT_HEAVY = _find_font(
-    '/System/Library/Fonts/ヒラギノ角ゴシック W9.ttc',
-    '/usr/share/fonts/opentype/noto/NotoSansCJK-Black.ttc',
-    '/usr/share/fonts/truetype/noto/NotoSansCJK-Black.ttc',
-    '/usr/share/fonts/opentype/noto-cjk/NotoSansCJK-Black.ttc',
-)
-FONT_BOLD = _find_font(
-    '/System/Library/Fonts/ヒラギノ角ゴシック W8.ttc',
-    '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc',
-    '/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc',
-    '/usr/share/fonts/opentype/noto-cjk/NotoSansCJK-Bold.ttc',
-)
-FONT_MED = _find_font(
-    '/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc',
-    '/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc',
-    '/usr/share/fonts/truetype/noto/NotoSansCJK-Medium.ttc',
-    '/usr/share/fonts/opentype/noto-cjk/NotoSansCJK-Medium.ttc',
-)
+_FONTS = _resolve_jp_fonts()
+FONT_HEAVY = _FONTS['Black']
+FONT_BOLD  = _FONTS['Bold']
+FONT_MED   = _FONTS['Medium']
 
 def font(p, s): return ImageFont.truetype(p, s)
 
