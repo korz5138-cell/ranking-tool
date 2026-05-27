@@ -48,7 +48,7 @@ def short_name(n):
 
 def load_ranking_xlsx(xlsx):
     """xlsx 形式: 台番, 機種名(表記), 機種名(正式), 差枚, BB, RB, ART, G数"""
-    wb = openpyxl.load_workbook(xlsx, data_only=True)
+    wb = openpyxl.load_workbook(xlsx, data_only=True, read_only=True)
     ws = wb[wb.sheetnames[0]]
     rows = [r for r in ws.iter_rows(min_row=2, values_only=True)
             if r and r[0] is not None]
