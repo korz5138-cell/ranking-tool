@@ -107,6 +107,9 @@ if 'pngs' not in st.session_state:
 
 st.title('🎰 差枚ランキング画像ジェネレーター')
 st.caption('Excel / CSV をアップロードするとランキング画像（PNG）を生成します。店舗名・日付は後から手動編集可能。')
+st.markdown(
+    '📖 [操作マニュアルを開く](https://github.com/korz5138-cell/ranking-tool/blob/main/MANUAL.md)'
+)
 
 # サイドバー: デザイン選択 + 履歴
 with st.sidebar:
