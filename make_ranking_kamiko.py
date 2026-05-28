@@ -273,6 +273,12 @@ def _classify_diff_label(label: str) -> str | None:
     return None
 
 
+# シート走査の安全上限。Excel の空シートは最大 1,048,576 行を主張するため、
+# 上限を設けないと巨大シートで著しいメモリ・時間消費が発生してクラッシュ要因になる。
+_MAX_HEADER_SCAN = 200    # ヘッダー検索: 通常 1-20 行以内に存在
+_MAX_DATA_SCAN = 5000     # データ行: 実際のホール台数の妥当な上限
+
+
 def _find_header_columns(ws):
     """シート内から '台番' '機種名' '差(枚)' を含むヘッダー行を検出し、
     (header_row_1based, col_dai, col_name, col_diff, col_bb, col_rb, diff_kind) を返す。
@@ -280,7 +286,7 @@ def _find_header_columns(ws):
     """
     BB_LABELS = {'BB', 'BB回数', 'ＢＢ'}
     RB_LABELS = {'RB', 'RB回数', 'ＲＢ'}
-    for i, r in enumerate(ws.iter_rows(values_only=True), start=1):
+    for i, r in enumerate(ws.iter_rows(max_row=_MAX_HEADER_SCAN, values_only=True), start=1):
         if not r:
             continue
         cells = list(r)
@@ -309,10 +315,14 @@ def _find_header_columns(ws):
 
 
 def _count_data_rows(ws, header_row, col_dai, col_name):
-    """ヘッダーより下にある有効データ行の数をカウント。"""
+    """ヘッダーより下にある有効データ行の数をカウント。
+    Excel の空シートは max_row が極端に大きい値（〜100万行）を返すため、
+    安全上限 _MAX_DATA_SCAN を超える行はスキャンしない。
+    """
     max_col = max(col_dai, col_name)
     count = 0
-    for r in ws.iter_rows(min_row=header_row + 1, values_only=True):
+    end_row = header_row + _MAX_DATA_SCAN
+    for r in ws.iter_rows(min_row=header_row + 1, max_row=end_row, values_only=True):
         if not r or len(r) <= max_col:
             continue
         if r[col_dai] is None or r[col_name] is None:
@@ -373,7 +383,8 @@ def load_ranking_studio_xlsx(path):
 
     max_col = max(c for c in (col_dai, col_name, col_diff, col_bb, col_rb) if c is not None)
     rows = []
-    for r in chosen_ws.iter_rows(min_row=header_row + 1, values_only=True):
+    end_row = header_row + _MAX_DATA_SCAN
+    for r in chosen_ws.iter_rows(min_row=header_row + 1, max_row=end_row, values_only=True):
         if not r or len(r) <= max_col:
             continue
         dai_v = r[col_dai]
