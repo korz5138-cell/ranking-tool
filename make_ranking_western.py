@@ -199,8 +199,6 @@ def draw_rank_badge(draw, x, y, w, h, rank):
         # 「位」
         f_p = font(FONT_BOLD, 14)
         draw.text((cx + 14, cy + 8), '位', font=f_p, fill=COL_NAVY, anchor='lm')
-        # 右上に星
-        draw_star(draw, cx + 14, cy - 12, 6, COL_GOLD, outline=COL_BROWN_DARK)
     else:
         # シンプル円
         draw.ellipse([x + 8, y + 6, x + w - 8, y + h - 6],
@@ -210,8 +208,6 @@ def draw_rank_badge(draw, x, y, w, h, rank):
                   fill=COL_NAVY, anchor='mm')
         f_p = font(FONT_BOLD, 12)
         draw.text((cx + 12, cy + 6), '位', font=f_p, fill=COL_NAVY, anchor='lm')
-        # 小さい星
-        draw_star(draw, cx + 14, cy - 10, 4, COL_GOLD)
 
 
 # ===== メイン描画 =====
@@ -414,13 +410,8 @@ def render_image(ranking, date_full, store, out_path):
     draw.rectangle([0, fy, W, fy + FOOTER_H], fill=COL_RED)
     draw.rectangle([0, fy, W, fy + 4], fill=COL_GOLD)
     draw.rectangle([0, fy + FOOTER_H - 4, W, fy + FOOTER_H], fill=COL_GOLD)
-    # 飾り：両端にハート、星を散らす
-    f_heart = font(FONT_BOLD, 24)
-    draw.text((30, fy + FOOTER_H / 2), '♥', font=f_heart,
-              fill=COL_PAPER, anchor='mm')
-    draw.text((W - 30, fy + FOOTER_H / 2), '♥', font=f_heart,
-              fill=COL_PAPER, anchor='mm')
-    for sx in (90, 150, 210, W - 90, W - 150, W - 210):
+    # 飾り：両端と内側に星を散らす
+    for sx in (40, 90, 140, 190, W - 40, W - 90, W - 140, W - 190):
         draw_star(draw, sx, fy + FOOTER_H / 2, 8, COL_GOLD_LIGHT)
     # 店舗名
     draw.text((W / 2, fy + 32), store, font=font(FONT_HEAVY, 30),
@@ -428,7 +419,7 @@ def render_image(ranking, date_full, store, out_path):
               stroke_width=2, stroke_fill=COL_RED_DEEP)
     # サブテキスト
     draw.text((W / 2, fy + 64),
-              f'♡  20スロ  /  {footer_date}  /  差枚ランキング TOP{N}  ♡',
+              f'☆  20スロ  /  {footer_date}  /  差枚ランキング TOP{N}  ☆',
               font=font(FONT_BOLD, 14), fill=COL_PAPER, anchor='mm')
 
     os.makedirs(os.path.dirname(out_path) or '.', exist_ok=True)
