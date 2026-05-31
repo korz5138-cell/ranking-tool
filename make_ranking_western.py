@@ -104,40 +104,29 @@ def draw_title_panel(img, draw, x, y, w, h):
     draw.rounded_rectangle([x + 8, y + 8, x + w - 8, y + h - 8], radius=16,
                            outline=COL_NAVY, width=2)
 
-    # "☆ Slot ☆" 小文字
-    f_sub = font(FONT_BOLD, 22)
-    sub = '☆  Slot  ☆'
-    sw = draw.textlength(sub, font=f_sub)
-    draw.text((x + w / 2 - sw / 2, y + 18), sub,
-              font=f_sub, fill=COL_NAVY)
+    # 縦方向に分割: 上 1/3 を "☆ Slot ☆"、下 2/3 を "差枚ランキング" のセンター
+    sub_cy = y + h * 0.28
+    title_cy = y + h * 0.62
 
-    # メインタイトル「差枚ランキング」黄→赤グラデ風 + ブラウン縁取り
+    # "☆ Slot ☆"
+    f_sub = font(FONT_BOLD, 24)
+    draw.text((x + w / 2, sub_cy), '☆  Slot  ☆',
+              font=f_sub, fill=COL_NAVY, anchor='mm')
+
+    # メインタイトル「差枚ランキング」: ブラウンの太い縁取り + 金本体（単色で確実に中央）
     title = '差枚ランキング'
-    f_title = font(FONT_HEAVY, 64)
-    tw = draw.textlength(title, font=f_title)
-    tx = x + w / 2 - tw / 2
-    ty = y + 50
-    # 影 (ブラウンの太いストローク)
-    draw.text((tx, ty), title, font=f_title,
-              fill=COL_GOLD_LIGHT, stroke_width=6, stroke_fill=COL_BROWN_DARK)
-    # 上半分を黄、下半分を赤で重ね描き（簡易グラデ風）
-    grad_img = Image.new('RGBA', (int(tw) + 20, 80), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(grad_img)
-    gd.text((10, 0), title, font=f_title, fill=COL_GOLD_LIGHT)
-    # 下部マスクで赤に塗り直し
-    for yy in range(grad_img.height):
-        t = yy / grad_img.height
-        if t > 0.45:
-            for xx in range(grad_img.width):
-                px = grad_img.getpixel((xx, yy))
-                if px[3] > 0:
-                    # クリーム→金→赤 のグラデーション
-                    if t < 0.7:
-                        col = COL_GOLD
-                    else:
-                        col = COL_RED
-                    grad_img.putpixel((xx, yy), col + (px[3],))
-    img.paste(grad_img, (int(tx) - 10, int(ty)), grad_img)
+    f_title = font(FONT_HEAVY, 68)
+    draw.text((x + w / 2, title_cy), title,
+              font=f_title, fill=COL_GOLD_LIGHT, anchor='mm',
+              stroke_width=6, stroke_fill=COL_BROWN_DARK)
+    # 軽く赤みを下にも乗せる演出（影として少し下にずらして描画）
+    draw.text((x + w / 2 + 1, title_cy + 4), title,
+              font=f_title, fill=COL_RED, anchor='mm',
+              stroke_width=2, stroke_fill=COL_BROWN_DARK)
+    # もう一度ゴールドで上書き（メインの色味）
+    draw.text((x + w / 2, title_cy), title,
+              font=f_title, fill=COL_GOLD_LIGHT, anchor='mm',
+              stroke_width=3, stroke_fill=COL_BROWN_DARK)
 
 
 def draw_date_badge(img, draw, cx, cy, r, date_str):
