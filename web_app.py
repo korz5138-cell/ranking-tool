@@ -26,6 +26,7 @@ if HERE not in sys.path:
 
 import make_ranking_kamiko as kamiko  # noqa: E402
 import make_ranking as win6           # noqa: E402
+import make_ranking_western as western  # noqa: E402
 
 
 # ===== 画像生成 =====
@@ -56,7 +57,12 @@ def render_to_png(ranking, date_full: str, store: str, design: str) -> bytes:
     """ranking + 店舗 + 日付 + デザイン から PNG バイト列を生成。"""
     tmpdir = tempfile.mkdtemp(prefix='ranking_out_')
     out_path = os.path.join(tmpdir, f'{date_full[4:]}_{store}.png')
-    render_fn = win6.render_image if design == 'win6game' else kamiko.render_image
+    if design == 'win6game':
+        render_fn = win6.render_image
+    elif design == '英語取材':
+        render_fn = western.render_image
+    else:
+        render_fn = kamiko.render_image
     render_fn(ranking, date_full, store, out_path)
     with open(out_path, 'rb') as f:
         return f.read()
@@ -116,9 +122,9 @@ with st.sidebar:
     st.subheader('設定')
     design = st.radio(
         'デザイン',
-        options=['神の子', 'win6game'],
+        options=['神の子', 'win6game', '英語取材'],
         index=0,
-        help='神の子＝パステル系 TOP10 / win6game＝黒背景 TOP15',
+        help='神の子＝パステル系 / win6game＝黒背景・赤黄 / 英語取材＝アメリカンヴィンテージ',
     )
 
     st.divider()
