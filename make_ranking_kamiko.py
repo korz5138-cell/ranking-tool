@@ -268,7 +268,7 @@ def _classify_diff_label(label: str) -> str | None:
     s = re.sub(r'[（(].*?[)）]', '', str(label)).strip()
     if s in ('差枚', '差枚数'):
         return 'player'   # セーフ - アウト
-    if s in ('差', '差１', '差1'):
+    if s in ('差', '差１', '差1', '差数'):
         return 'shop'     # アウト - セーフ
     return None
 
@@ -298,7 +298,7 @@ def _find_header_columns(ws):
             cs = c.strip()
             if cs in ('台番', '台番号') and col_dai is None:
                 col_dai = j
-            elif cs == '機種名' and col_name is None:
+            elif cs in ('機種名', 'SIS機種名') and col_name is None:
                 col_name = j
             elif cs in BB_LABELS and col_bb is None:
                 col_bb = j
@@ -902,6 +902,18 @@ def parse_filename(path):
         store = m.group(1).strip(' 　_-')
         y, mo, d = int(m.group(2)), int(m.group(3)), int(m.group(4))
         return f'{y}{mo:02d}{d:02d}', resolve_store_name(store)
+    # スタジオ形式E: M.D{取材タグ}{店舗名} - カッコの後を店舗名とする
+    # 例: 6.5S級ホール調査（赤）PIA大森 → date=20260605, store=PIA大森
+    m = re.match(r'^(\d{1,2})\.(\d{1,2})(.+)$', base)
+    if m:
+        mo, d = int(m.group(1)), int(m.group(2))
+        rest = m.group(3)
+        # 末尾のカッコ閉じ以降を店舗名とする（複数あれば最後の）以降）
+        parts = re.split(r'[）)]', rest)
+        store = parts[-1].strip(' 　_-') if len(parts) > 1 else rest.strip(' 　_-')
+        if store:
+            year = datetime.now().year
+            return f'{year}{mo:02d}{d:02d}', resolve_store_name(store)
     m = re.match(r'^(\d{8})_([^_]+)_', base)
     if m:
         return m.group(1), resolve_store_name(m.group(2))
