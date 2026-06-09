@@ -127,6 +127,18 @@ with st.sidebar:
         help='神の子＝パステル系 / win6game＝黒背景・赤黄 / 英語取材＝アメリカンヴィンテージ',
     )
 
+    if st.button('🔄 全キャッシュをクリアして再生成', use_container_width=True,
+                 help='機種名リストが更新された後など、画像を再生成したい時に使用'):
+        st.session_state.parsed = {}
+        st.session_state.overrides = {}
+        st.session_state.pngs = {}
+        # 機種名マップのモジュールレベルキャッシュもクリア
+        try:
+            kamiko._MODEL_ALIAS = None
+        except Exception:
+            pass
+        st.rerun()
+
     st.divider()
     st.subheader('履歴（このセッション）')
     if not st.session_state.history:
