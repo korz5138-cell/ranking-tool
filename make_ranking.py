@@ -138,6 +138,13 @@ def render_image(ranking, date_full, store, out_path):
     date_badge = f'{mm} / {dd}'
     footer_date = f'{yyyy}年{mm}月{dd}日'
 
+    # ---------- パチンコ/スロット判定 ----------
+    is_pachi = bool(ranking) and ranking[0].get('kind') == 'pachinko'
+    lbl_diff = '差玉' if is_pachi else '差枚'
+    lbl_unit = '発' if is_pachi else '枚'
+    title_text = f'パチンコ {lbl_diff}ランキング' if is_pachi else f'スロット {lbl_diff}ランキング'
+    play_label = '4円パチンコ' if is_pachi else '20スロ'
+
     # ---------- レイアウト ----------
     PAD = 8
     has_bb_rb = bool(ranking) and ('bb' in ranking[0]) and (ranking[0].get('bb') is not None)
@@ -146,7 +153,7 @@ def render_image(ranking, date_full, store, out_path):
         ('rank', '順位',   100),
         ('dai',  '台番号', 170),
         ('name', '機種名', 320 if has_bb_rb else 550),
-        ('sa',   '差枚',   200),
+        ('sa',   lbl_diff, 200),
     ]
     if has_bb_rb:
         COLS.append(('bb', 'BB', 115))
@@ -166,7 +173,7 @@ def render_image(ranking, date_full, store, out_path):
 
     # ---------- ヘッダー：タイトル ----------
     ft_title = font(FONT_HEAVY, 64)
-    draw.text((80, 88), 'スロット 差枚ランキング', font=ft_title,
+    draw.text((80, 88), title_text, font=ft_title,
               fill=(220, 30, 30), anchor='lm',
               stroke_width=4, stroke_fill=(255, 240, 200))
 
@@ -297,7 +304,7 @@ def render_image(ranking, date_full, store, out_path):
         sa_color = (255, 230, 90) if sa >= 0 else (220, 100, 100)
         sa_text = ('+' if sa > 0 else '') + f'{sa:,}'
         mai_x = cx + w - 14
-        draw.text((mai_x, y + ROW_H / 2 + 10), '枚', font=f_unit,
+        draw.text((mai_x, y + ROW_H / 2 + 10), lbl_unit, font=f_unit,
                   fill=(245, 210, 80), anchor='rm')
         draw.text((mai_x - 22, y + ROW_H / 2), sa_text, font=f_val,
                   fill=sa_color, anchor='rm')
@@ -346,7 +353,7 @@ def render_image(ranking, date_full, store, out_path):
     draw.text((W / 2, fy + 30), store_disp,
               font=font(FONT_HEAVY, 32), fill=(255, 255, 255), anchor='mm')
     draw.text((W / 2, fy + 60),
-              f'20スロ ／ {footer_date} ／ 差枚ランキング TOP{N}',
+              f'{play_label} ／ {footer_date} ／ {lbl_diff}ランキング TOP{N}',
               font=font(FONT_BOLD, 17), fill=(255, 230, 180), anchor='mm')
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)

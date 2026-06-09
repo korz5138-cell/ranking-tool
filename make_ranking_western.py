@@ -88,7 +88,7 @@ def draw_flag_band(img, draw, x, y, w, h, side='left'):
         draw.rectangle([x, sy_, x + w, sy_ + sh + 1], fill=c)
 
 
-def draw_title_panel(img, draw, x, y, w, h):
+def draw_title_panel(img, draw, x, y, w, h, title='差枚ランキング'):
     """タイトルパネル：クリーム角丸 + 紺ボーダー + 中央にタイトル文字。"""
     # 影
     sh = Image.new('RGBA', (w + 30, h + 30), (0, 0, 0, 0))
@@ -113,8 +113,7 @@ def draw_title_panel(img, draw, x, y, w, h):
     draw.text((x + w / 2, sub_cy), '☆  Slot  ☆',
               font=f_sub, fill=COL_NAVY, anchor='mm')
 
-    # メインタイトル「差枚ランキング」: ブラウンの太い縁取り + 金本体（単色で確実に中央）
-    title = '差枚ランキング'
+    # メインタイトル「差枚/差玉ランキング」: ブラウンの太い縁取り + 金本体
     f_title = font(FONT_HEAVY, 68)
     draw.text((x + w / 2, title_cy), title,
               font=f_title, fill=COL_GOLD_LIGHT, anchor='mm',
@@ -208,6 +207,13 @@ def render_image(ranking, date_full, store, out_path):
     date_str = f'{mm}/{dd}'
     footer_date = f'{yyyy}年{mm}月{dd}日'
 
+    # パチンコ/スロット判定
+    is_pachi = bool(ranking) and ranking[0].get('kind') == 'pachinko'
+    lbl_diff = '差玉' if is_pachi else '差枚'
+    lbl_unit = '発' if is_pachi else '枚'
+    title_main = f'{lbl_diff}ランキング'
+    play_label = '4円パチンコ' if is_pachi else '20スロ'
+
     has_bb_rb = bool(ranking) and ('bb' in ranking[0]) and (ranking[0].get('bb') is not None)
 
     # ===== レイアウト =====
@@ -218,7 +224,7 @@ def render_image(ranking, date_full, store, out_path):
         ('rank', '順位',   110),
         ('dai',  '台番号', 180),
         ('name', '機種名', 360 if has_bb_rb else 510),
-        ('sa',   '差枚',   200),
+        ('sa',   lbl_diff, 200),
     ]
     if has_bb_rb:
         COLS.append(('bb', 'BB', 110))
@@ -245,7 +251,7 @@ def render_image(ranking, date_full, store, out_path):
     # ===== ヘッダー: タイトル + 日付バッジ =====
     title_w = INNER_W - 180
     title_h = 130
-    draw_title_panel(img, draw, INNER_X + 30, 18, title_w, title_h)
+    draw_title_panel(img, draw, INNER_X + 30, 18, title_w, title_h, title=title_main)
 
     # 日付バッジ（右上）
     badge_r = 60
@@ -361,7 +367,7 @@ def render_image(ranking, date_full, store, out_path):
         sa_color = COL_RED_DEEP if sa >= 0 else COL_NAVY
         sw = draw.textlength(sa_text, font=f_val)
         mai_x = cx + w - 22
-        draw.text((mai_x, y + ROW_H / 2 + 7), '枚', font=f_unit,
+        draw.text((mai_x, y + ROW_H / 2 + 7), lbl_unit, font=f_unit,
                   fill=COL_BROWN, anchor='rm')
         draw.text((mai_x - 22, y + ROW_H / 2), sa_text, font=f_val,
                   fill=sa_color, anchor='rm')
@@ -408,7 +414,7 @@ def render_image(ranking, date_full, store, out_path):
               stroke_width=2, stroke_fill=COL_RED_DEEP)
     # サブテキスト
     draw.text((W / 2, fy + 64),
-              f'☆  20スロ  /  {footer_date}  /  差枚ランキング TOP{N}  ☆',
+              f'☆  {play_label}  /  {footer_date}  /  {lbl_diff}ランキング TOP{N}  ☆',
               font=font(FONT_BOLD, 14), fill=COL_PAPER, anchor='mm')
 
     os.makedirs(os.path.dirname(out_path) or '.', exist_ok=True)

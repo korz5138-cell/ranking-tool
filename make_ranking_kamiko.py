@@ -279,10 +279,20 @@ _MAX_HEADER_SCAN = 200    # ヘッダー検索: 通常 1-20 行以内に存在
 _MAX_DATA_SCAN = 5000     # データ行: 実際のホール台数の妥当な上限
 
 
+# パチンコ特有のヘッダー語彙（スロットと共通の「実出率」「スタート回数」等は除外）
+_PACHINKO_HEADER_KEYWORDS = {
+    '台アウト', '特賞アウト', '特Aアウト',
+    'ベース', 'ベースA',
+    '特1回数', '特2回数',
+    '補T1Y', 'BYmini', 'Bymini', 'ＴＳ', 'TS',
+}
+
+
 def _find_header_columns(ws):
     """シート内から '台番' '機種名' '差(枚)' を含むヘッダー行を検出し、
-    (header_row_1based, col_dai, col_name, col_diff, col_bb, col_rb, diff_kind) を返す。
-    diff_kind は 'player' / 'shop'。検出失敗時は (None,)*7。
+    (header_row_1based, col_dai, col_name, col_diff, col_bb, col_rb, diff_kind, is_pachinko) を返す。
+    diff_kind は 'player' / 'shop'。検出失敗時は (None,)*8。
+    is_pachinko: ヘッダー行に台アウト/特賞アウト等のパチンコ特有ラベルがあれば True。
     """
     BB_LABELS = {'BB', 'BB回数', 'ＢＢ'}
     RB_LABELS = {'RB', 'RB回数', 'ＲＢ'}
@@ -292,10 +302,13 @@ def _find_header_columns(ws):
         cells = list(r)
         col_dai = col_name = col_diff = col_bb = col_rb = None
         diff_kind = None
+        is_pachinko = False
         for j, c in enumerate(cells):
             if not isinstance(c, str):
                 continue
             cs = c.strip()
+            if cs in _PACHINKO_HEADER_KEYWORDS:
+                is_pachinko = True
             if cs in ('台番', '台番号') and col_dai is None:
                 col_dai = j
             elif cs in ('機種名', 'SIS機種名') and col_name is None:
@@ -310,8 +323,8 @@ def _find_header_columns(ws):
                     col_diff = j
                     diff_kind = kind
         if col_dai is not None and col_name is not None and col_diff is not None:
-            return i, col_dai, col_name, col_diff, col_bb, col_rb, diff_kind
-    return None, None, None, None, None, None, None
+            return i, col_dai, col_name, col_diff, col_bb, col_rb, diff_kind, is_pachinko
+    return None, None, None, None, None, None, None, False
 
 
 def _count_data_rows(ws, header_row, col_dai, col_name):
@@ -361,15 +374,15 @@ def load_ranking_studio_xlsx(path):
     wb = openpyxl.load_workbook(path, data_only=True)
 
     # 各シートを評価
-    candidates = []  # (priority, count, ws, header_row, cd, cn, cf, cb, cr, diff_kind)
+    candidates = []  # (priority, count, ws, header_row, cd, cn, cf, cb, cr, diff_kind, is_pachi)
     for sn in wb.sheetnames:
         ws = wb[sn]
-        hr, cd, cn, cf, cb, cr, dk = _find_header_columns(ws)
+        hr, cd, cn, cf, cb, cr, dk, ip = _find_header_columns(ws)
         if hr is None:
             continue
         count = _count_data_rows(ws, hr, cd, cn)
         priority = 2 if sn == 'S' else 1
-        candidates.append((priority, count, ws, hr, cd, cn, cf, cb, cr, dk))
+        candidates.append((priority, count, ws, hr, cd, cn, cf, cb, cr, dk, ip))
 
     if not candidates:
         raise ValueError(
@@ -379,7 +392,8 @@ def load_ranking_studio_xlsx(path):
     # priority 降順 → count 降順
     candidates.sort(key=lambda x: (-x[0], -x[1]))
     (_, _, chosen_ws, header_row, col_dai, col_name, col_diff,
-     col_bb, col_rb, diff_kind) = candidates[0]
+     col_bb, col_rb, diff_kind, is_pachinko) = candidates[0]
+    kind = 'pachinko' if is_pachinko else 'slot'
 
     max_col = max(c for c in (col_dai, col_name, col_diff, col_bb, col_rb) if c is not None)
     rows = []
@@ -405,6 +419,7 @@ def load_ranking_studio_xlsx(path):
             'dai':   dai,
             'name':  resolve_model_name(name_v),
             'samai': samai,
+            'kind':  kind,
         }
         if col_bb is not None:
             row['bb'] = _to_int(r[col_bb])
@@ -473,6 +488,12 @@ def render_image(ranking, date_full, store, out_path):
     date_badge = f'{mm}/{dd}'
     footer_date = f'{yyyy}年{mm}月{dd}日'
 
+    # ---------- パチンコ/スロット判定 ----------
+    is_pachi = bool(ranking) and ranking[0].get('kind') == 'pachinko'
+    lbl_diff = '差玉' if is_pachi else '差枚'
+    lbl_unit = '発' if is_pachi else '枚'
+    play_label = '4円パチンコ' if is_pachi else '20スロ'
+
     # ---------- レイアウト ----------
     PAD = 12
     has_bb_rb = bool(ranking) and ('bb' in ranking[0])
@@ -480,7 +501,7 @@ def render_image(ranking, date_full, store, out_path):
         ('rank', '順位',   100),
         ('dai',  '台番号', 170),
         ('name', '機種名', 320 if has_bb_rb else 470),
-        ('sa',   '差枚',   200),
+        ('sa',   lbl_diff, 200),
     ]
     if has_bb_rb:
         COLS.append(('bb', 'BB', 115))
@@ -551,7 +572,7 @@ def render_image(ranking, date_full, store, out_path):
               fill=(120, 180, 230), anchor='mm',
               stroke_width=2, stroke_fill=(255, 255, 255))
     # メインタイトル：黒の縁取り＋ピンク
-    draw.text((title_cx, 110), '差枚ランキング', font=ft_main,
+    draw.text((title_cx, 110), f'{lbl_diff}ランキング', font=ft_main,
               fill=(255, 105, 160), anchor='mm',
               stroke_width=4, stroke_fill=(255, 255, 255))
 
@@ -734,7 +755,7 @@ def render_image(ranking, date_full, store, out_path):
         sa_color = (255, 90, 130) if sa >= 0 else (130, 160, 200)
         sa_text = ('+' if sa > 0 else '') + f'{sa:,}'
         mai_x = cx + w - 14
-        draw.text((mai_x, y + ROW_H / 2 + 10), '枚', font=f_unit,
+        draw.text((mai_x, y + ROW_H / 2 + 10), lbl_unit, font=f_unit,
                   fill=(255, 130, 170), anchor='rm')
         draw.text((mai_x - 22, y + ROW_H / 2), sa_text, font=f_val,
                   fill=sa_color, anchor='rm',
@@ -788,7 +809,7 @@ def render_image(ranking, date_full, store, out_path):
               font=font(FONT_HEAVY, 32), fill=(255, 90, 140), anchor='mm',
               stroke_width=2, stroke_fill=(255, 255, 255))
     draw.text((W / 2, fy + 62),
-              f'♡ 20スロ ／ {footer_date} ／ 差枚ランキング TOP10 ♡',
+              f'♡ {play_label} ／ {footer_date} ／ {lbl_diff}ランキング TOP10 ♡',
               font=font(FONT_BOLD, 16), fill=(120, 100, 160), anchor='mm')
 
     # フッター左右にハート飾り
