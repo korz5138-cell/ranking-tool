@@ -111,6 +111,9 @@ def _normalize_model_key(s):
     for ch in (' ', '　', '/', '\\', '.', '-', '・', '~', '‾', '!', '?', '_',
                '(', ')', '（', '）', '「', '」', '『', '』', '【', '】', ',', '、'):
         n = n.replace(ch, '')
+    # 先頭の数値プレフィックス（46/20 等の貸玉率）を除去
+    # 例: 46SネオアイムジャグラーEX-KK → SネオアイムジャグラーEX-KK
+    n = re.sub(r'^\d{1,3}(?=[A-Za-zＡ-ｚ])', '', n)
     # 先頭の L/S/LB プレフィックス直後にある「パチスロ/スマスロ/パチンコ」を除去
     for prefix in ('パチスロ', 'スマスロ', 'パチンコ'):
         idx = n.find(prefix)
@@ -268,7 +271,7 @@ def _classify_diff_label(label: str) -> str | None:
     s = re.sub(r'[（(].*?[)）]', '', str(label)).strip()
     if s in ('差枚', '差枚数'):
         return 'player'   # セーフ - アウト
-    if s in ('差', '差１', '差1', '差数'):
+    if s in ('差', '差１', '差1', '差数', '差玉'):
         return 'shop'     # アウト - セーフ
     return None
 
@@ -277,6 +280,41 @@ def _classify_diff_label(label: str) -> str | None:
 # 上限を設けないと巨大シートで著しいメモリ・時間消費が発生してクラッシュ要因になる。
 _MAX_HEADER_SCAN = 200    # ヘッダー検索: 通常 1-20 行以内に存在
 _MAX_DATA_SCAN = 5000     # データ行: 実際のホール台数の妥当な上限
+
+
+# ===== .xls (旧形式) を openpyxl 風 API で扱うためのアダプタ =====
+class _XlrdSheetAdapter:
+    """xlrd Sheet を openpyxl Worksheet の subset (iter_rows) として包む。"""
+
+    def __init__(self, sheet):
+        self._sheet = sheet
+        self.max_row = sheet.nrows
+        self.max_column = sheet.ncols
+
+    def iter_rows(self, min_row=1, max_row=None, values_only=True):
+        start = max(0, min_row - 1)
+        end = min(self._sheet.nrows, max_row) if max_row else self._sheet.nrows
+        for i in range(start, end):
+            row = tuple(self._sheet.row_values(i))
+            # xlrd は空セルを '' で返す。openpyxl は None なので合わせる
+            yield tuple(None if (isinstance(c, str) and c == '') else c for c in row)
+
+
+class _XlrdWorkbookAdapter:
+    def __init__(self, wb):
+        self._wb = wb
+        self.sheetnames = wb.sheet_names()
+
+    def __getitem__(self, name):
+        return _XlrdSheetAdapter(self._wb.sheet_by_name(name))
+
+    def close(self):
+        pass
+
+
+def _open_xls_as_openpyxl_like(path):
+    import xlrd
+    return _XlrdWorkbookAdapter(xlrd.open_workbook(path))
 
 
 # パチンコ特有のヘッダー語彙（スロットと共通の「実出率」「スタート回数」等は除外）
@@ -370,8 +408,12 @@ def load_ranking_studio_xlsx(path):
       - 列ラベルが '差' / '差１' / '差1' → 店側視点（アウト-セーフ）→ プレイヤー視点に反転
       - 列ラベルが '差枚' / '差枚数' / '差枚(自動計算)' 等 → 既にプレイヤー視点 → そのまま
     BB/RB 列があれば抽出。
+    .xls (旧形式) も xlrd 経由で同じインタフェースで処理する。
     """
-    wb = openpyxl.load_workbook(path, data_only=True)
+    if path.lower().endswith('.xls'):
+        wb = _open_xls_as_openpyxl_like(path)
+    else:
+        wb = openpyxl.load_workbook(path, data_only=True)
 
     # 各シートを評価
     candidates = []  # (priority, count, ws, header_row, cd, cn, cf, cb, cr, diff_kind, is_pachi)
@@ -432,12 +474,16 @@ def load_ranking_studio_xlsx(path):
 
 def load_ranking(path):
     base = os.path.basename(path)
+    low = path.lower()
+    # 旧 .xls 形式 → studio ローダーで自動列検出
+    if low.endswith('.xls'):
+        return load_ranking_studio_xlsx(path)
     # 神の子取材系xlsx（【店舗】開始 or ファイル名に「神の子」「取材」「調査」を含む）
-    if base.lower().endswith('.xlsx') and (
+    if low.endswith('.xlsx') and (
         base.startswith('【') or '神の子' in base or '取材' in base or '調査' in base
     ):
         return load_ranking_studio_xlsx(path)
-    if path.lower().endswith('.csv'):
+    if low.endswith('.csv'):
         return load_ranking_csv(path)
     # 標準xlsx形式 → 失敗時は神の子形式にフォールバック
     try:
@@ -925,6 +971,7 @@ def parse_filename(path):
         return f'{y}{mo:02d}{d:02d}', resolve_store_name(store)
     # スタジオ形式E: M.D{取材タグ}{店舗名} - カッコの後を店舗名とする
     # 例: 6.5S級ホール調査（赤）PIA大森 → date=20260605, store=PIA大森
+    # 例: 6.4_サンキュー結果         → date=20260604, store=サンキュー
     m = re.match(r'^(\d{1,2})\.(\d{1,2})(.+)$', base)
     if m:
         mo, d = int(m.group(1)), int(m.group(2))
@@ -932,6 +979,8 @@ def parse_filename(path):
         # 末尾のカッコ閉じ以降を店舗名とする（複数あれば最後の）以降）
         parts = re.split(r'[）)]', rest)
         store = parts[-1].strip(' 　_-') if len(parts) > 1 else rest.strip(' 　_-')
+        # 末尾の汎用語（結果/データ/出力/調査/集計）を除去
+        store = re.sub(r'(結果|データ|出力|調査|集計)+$', '', store).rstrip(' 　_-')
         if store:
             year = datetime.now().year
             return f'{year}{mo:02d}{d:02d}', resolve_store_name(store)
