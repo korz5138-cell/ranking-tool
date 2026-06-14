@@ -473,26 +473,22 @@ def load_ranking_studio_xlsx(path):
 
 
 def load_ranking(path):
-    base = os.path.basename(path)
+    """ファイル拡張子で振り分け。
+    .csv は専用ローダー、それ以外（.xlsx/.xls）はすべて studio ローダー
+    （自動列検出）で処理する。studio ローダーは多様な列順・ヘッダー位置に
+    対応しているため、固定位置を前提とする旧 load_ranking_xlsx より安全。
+    studio で失敗した場合は固定位置ローダーへフォールバック。
+    """
     low = path.lower()
-    # 旧 .xls 形式 → studio ローダーで自動列検出
-    if low.endswith('.xls'):
-        return load_ranking_studio_xlsx(path)
-    # 神の子取材系xlsx（【店舗】開始 or ファイル名に「神の子」「取材」「調査」を含む）
-    if low.endswith('.xlsx') and (
-        base.startswith('【') or '神の子' in base or '取材' in base or '調査' in base
-    ):
-        return load_ranking_studio_xlsx(path)
     if low.endswith('.csv'):
         return load_ranking_csv(path)
-    # 標準xlsx形式 → 失敗時は神の子形式にフォールバック
     try:
-        result = load_ranking_xlsx(path)
+        result = load_ranking_studio_xlsx(path)
         if result:
             return result
     except Exception:
         pass
-    return load_ranking_studio_xlsx(path)
+    return load_ranking_xlsx(path)
 
 
 # ===== 装飾パーツ =====
