@@ -219,21 +219,26 @@ if uploaded:
 
             info = st.session_state.parsed[fid]
 
-            # 2) 表示用の店舗名・日付（手動上書きが優先）
+            # 2) 表示用の店舗名・日付・種別（手動上書きが優先）
             override = st.session_state.overrides.get(fid, {})
             store = override.get('store', info['auto_store'])
             date_full = override.get('date_full', info['auto_date'])
+            auto_kind = info['ranking'][0].get('kind', 'slot') if info['ranking'] else 'slot'
+            kind = override.get('kind', auto_kind)
             parse_ok = info['parse_ok'] or bool(override)
+
+            # ranking に kind を上書き（元データ改変を避けるためコピー）
+            ranking_for_render = [dict(r, kind=kind) for r in info['ranking']]
 
             # 3) 画像生成（同じ条件はキャッシュ再利用）
             png = None
             if store:
-                png_key = (fid, design, store, date_full)
+                png_key = (fid, design, store, date_full, kind)
                 if png_key in st.session_state.pngs:
                     png = st.session_state.pngs[png_key]
                 else:
                     try:
-                        png = render_to_png(info['ranking'], date_full, store, design)
+                        png = render_to_png(ranking_for_render, date_full, store, design)
                         st.session_state.pngs[png_key] = png
                     except Exception as e:
                         st.error(f'画像生成失敗: {e}')
@@ -270,12 +275,12 @@ if uploaded:
             elif not store:
                 st.warning('⚠️ 店舗名が未入力です。下記フォームで入力してください。')
 
-            # 5) 編集フォーム（店舗名・日付の上書き入力）
+            # 5) 編集フォーム（店舗名・日付・種別の上書き入力）
             with st.expander(
-                '✏️ 店舗名・日付を変更',
+                '✏️ 店舗名・日付・種別を変更',
                 expanded=(not parse_ok or not store),
             ):
-                ec1, ec2, ec3 = st.columns([3, 2, 1])
+                ec1, ec2, ec3, ec4 = st.columns([3, 2, 2, 1])
                 with ec1:
                     new_store = st.text_input(
                         '店舗名',
@@ -291,6 +296,16 @@ if uploaded:
                         format='YYYY/MM/DD',
                     )
                 with ec3:
+                    kind_options = ['スロット', 'パチンコ']
+                    current_kind_idx = 1 if kind == 'pachinko' else 0
+                    new_kind_label = st.selectbox(
+                        '種別',
+                        kind_options,
+                        index=current_kind_idx,
+                        key=f'kind_input_{fid}',
+                        help=f'自動判定: {"パチンコ" if auto_kind == "pachinko" else "スロット"}',
+                    )
+                with ec4:
                     st.write('')
                     st.write('')
                     regen = st.button(
@@ -306,9 +321,11 @@ if uploaded:
                         st.error('店舗名を入力してください')
                     else:
                         new_date_full = new_date.strftime('%Y%m%d')
+                        new_kind = 'pachinko' if new_kind_label == 'パチンコ' else 'slot'
                         st.session_state.overrides[fid] = {
                             'store': new_store_clean,
                             'date_full': new_date_full,
+                            'kind': new_kind,
                         }
                         st.rerun()
 
