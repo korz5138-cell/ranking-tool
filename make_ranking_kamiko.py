@@ -349,7 +349,7 @@ def _find_header_columns(ws):
                 is_pachinko = True
             if cs in ('台番', '台番号') and col_dai is None:
                 col_dai = j
-            elif cs in ('機種名', 'SIS機種名') and col_name is None:
+            elif cs in ('機種名', 'SIS機種名', '名称', '台名', '機種', '機械名') and col_name is None:
                 col_name = j
             elif cs in BB_LABELS and col_bb is None:
                 col_bb = j
