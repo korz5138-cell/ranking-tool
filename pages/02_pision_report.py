@@ -93,12 +93,24 @@ st.subheader('4. 確認・送信')
 if st.button('🔍 プレビュー生成', use_container_width=True, type='primary'):
     with st.spinner('データを取得中...'):
         try:
+            # API キーの確認
+            api_key = os.environ.get('PISION_API_KEY')
+            if not api_key:
+                st.error('❌ PISION_API_KEY が設定されていません')
+                st.stop()
+
+            st.write(f'ホールID: {selected_hall_id}, 日付: {target_date.isoformat()}')
+
             summary = ps.fetch_and_summarize_hall(selected_hall_id, target_date.isoformat())
             if not summary:
-                st.error('❌ 指定された日付にはデータが存在しません')
+                st.error('❌ 指定されたホール・日付のデータが見つかりません')
+                st.info('ℹ️ サイトで同じホール・日付のデータがあるか確認してください')
                 st.stop()
         except Exception as e:
-            st.error(f'エラー: データ取得に失敗しました\n{e}')
+            st.error(f'❌ エラー: データ取得に失敗しました')
+            st.write(f'詳細: {str(e)}')
+            import traceback
+            st.code(traceback.format_exc())
             st.stop()
 
     # ホール情報取得
