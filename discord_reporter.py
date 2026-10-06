@@ -41,16 +41,26 @@ def send_message(
     }
 
     try:
+        print(f'[DEBUG] Webhook URL: {webhook_url[:50]}...')
+        print(f'[DEBUG] Content length: {len(content)}')
+        print(f'[DEBUG] Image path: {image_path}')
+
         if image_path and Path(image_path).exists():
             with open(image_path, 'rb') as f:
                 image_data = f.read()
+            print(f'[DEBUG] Image size: {len(image_data)} bytes')
             response = requests.post(
                 webhook_url,
                 data=data,
                 files={'file': (Path(image_path).name, image_data)},
+                timeout=30,
             )
         else:
-            response = requests.post(webhook_url, json=data)
+            print(f'[DEBUG] Sending text only')
+            response = requests.post(webhook_url, json=data, timeout=30)
+
+        print(f'[DEBUG] Response status: {response.status_code}')
+        print(f'[DEBUG] Response text: {response.text}')
 
         response.raise_for_status()
         return True, "送信成功"
