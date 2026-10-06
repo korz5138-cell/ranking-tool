@@ -392,13 +392,16 @@ def generate_discord_text_hokuriku(summary: HallSummary, topic: str = "") -> str
     # 市町村がある場合は「県 市」、ない場合は「県」のみ
     pref_city = f"{pref_name} {city}" if city else pref_name
 
+    # 統計情報（マイナスの場合は非表示）
+    stats_line = f"全体{total_text}  {avg_text}" if total >= 0 else ""
+
     text = f"""{date_short}  万米データチェック🍚
 
 【{pref_city}】
 🌾{store_name}
 {topic_line}
 
-全体{total_text}  {avg_text}
+{stats_line}
 
 ■平均差枚上位
 {top3_text}"""
@@ -437,13 +440,16 @@ def generate_discord_text_kyoto(summary: HallSummary, topic: str = "") -> str:
     top3 = summary.kishu_summaries[:3]
     top3_text = "\n".join(f"・{k.short_name} +{int(k.avg_diff):,}枚" if k.avg_diff >= 0 else f"・{k.short_name}" for k in top3)
 
+    # 統計情報（マイナスの場合は非表示）
+    stats_line = f"全体{total_text}(平均{avg_text})" if total >= 0 else ""
+
     text = f"""わやスロデータまとめ🦊
 
 《{pref_city}》
 {date_short} {store_name}
 {topic_line}
 
-全体{total_text}(平均{avg_text})
+{stats_line}
 
 ■平均差枚上位3機種
 {top3_text}"""
