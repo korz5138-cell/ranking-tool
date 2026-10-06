@@ -76,15 +76,21 @@ def _load_city_mapping() -> dict[str, str]:
     """
     mapping = {}
 
+    try:
+        import openpyxl
+    except ImportError:
+        print('[WARNING] openpyxl がインストールされていません')
+        return mapping
+
     # ファイル1: 新潟山梨長野京都
     data_dir = Path(__file__).parent / 'data'
     file1 = data_dir / '店舗マスター_下書き_新潟山梨長野京都.xlsx'
     if not file1.exists():
         # フォールバック: Downloads から読み込む
         file1 = Path.home() / 'Downloads' / '店舗マスター_下書き_新潟山梨長野京都.xlsx'
+
     if file1.exists():
         try:
-            import openpyxl
             wb = openpyxl.load_workbook(file1, data_only=True)
             ws = wb['店舗マスター']
             for row in ws.iter_rows(min_row=5, values_only=True):
@@ -110,7 +116,6 @@ def _load_city_mapping() -> dict[str, str]:
 
     if file2.exists():
         try:
-            import openpyxl
             wb = openpyxl.load_workbook(file2, data_only=True)
             ws = wb['一覧']
             for row in ws.iter_rows(min_row=5, values_only=True):
