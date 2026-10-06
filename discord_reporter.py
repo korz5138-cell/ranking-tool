@@ -37,19 +37,14 @@ def send_message(
         'content': content,
     }
 
-    files = {}
-    if image_path:
-        if not Path(image_path).exists():
-            raise FileNotFoundError(f'画像ファイルが見つかりません: {image_path}')
-        with open(image_path, 'rb') as f:
-            files['file'] = f.read()
-
     try:
-        if files:
+        if image_path and Path(image_path).exists():
+            with open(image_path, 'rb') as f:
+                image_data = f.read()
             response = requests.post(
                 webhook_url,
                 data=data,
-                files={'file': (Path(image_path).name, files['file'])},
+                files={'file': (Path(image_path).name, image_data)},
             )
         else:
             response = requests.post(webhook_url, json=data)

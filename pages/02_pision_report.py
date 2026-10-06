@@ -128,9 +128,12 @@ if st.button('🔍 プレビュー生成', use_container_width=True, type='prima
     # 統計情報表示
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric('総差枚', f"+{summary.total_diff:,}枚")
+        total_str = f"+{summary.total_diff:,}" if summary.total_diff >= 0 else str(summary.total_diff)
+        st.metric('総差枚', f"{total_str}枚")
     with col2:
-        st.metric('平均差枚', f"+{summary.avg_diff:.0f}枚")
+        avg_val = int(summary.avg_diff)
+        avg_str = f"+{avg_val:,}" if avg_val >= 0 else str(avg_val)
+        st.metric('平均差枚', f"{avg_str}枚")
     with col3:
         avg_games = sum(u.games for u in summary.unit_details) // len(summary.unit_details) if summary.unit_details else 0
         st.metric('平均G数', f"{avg_games:,}G")
