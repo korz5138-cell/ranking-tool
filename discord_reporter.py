@@ -19,7 +19,7 @@ def send_message(
     content: str,
     image_path: str | None = None,
     username: str = "パチスロレポート",
-) -> bool:
+) -> tuple[bool, str]:
     """Discordにメッセージを送信
 
     Args:
@@ -28,9 +28,12 @@ def send_message(
         username: Webhook表示名
 
     Returns:
-        送信成功時 True
+        (送信成功時 True, エラーメッセージ)
     """
-    webhook_url = get_webhook_url()
+    try:
+        webhook_url = get_webhook_url()
+    except ValueError as e:
+        return False, str(e)
 
     data = {
         'username': username,
@@ -50,7 +53,8 @@ def send_message(
             response = requests.post(webhook_url, json=data)
 
         response.raise_for_status()
-        return True
-    except requests.RequestException as e:
-        print(f'Discord送信エラー: {e}')
-        return False
+        return True, "送信成功"
+    except Exception as e:
+        error_msg = f'Discord送信エラー: {str(e)}'
+        print(error_msg)
+        return False, error_msg

@@ -105,10 +105,11 @@ def main():
             else:
                 # Discord送信
                 print(f'  Discord送信中...')
-                if dr.send_message(text, output_path):
+                success, message = dr.send_message(text, output_path)
+                if success:
                     print(f'  ✓ 送信完了')
                 else:
-                    print(f'  ✗ 送信失敗')
+                    print(f'  ✗ 送信失敗: {message}')
 
         finally:
             # クリーンアップ

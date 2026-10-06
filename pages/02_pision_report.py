@@ -179,13 +179,12 @@ if st.button('🔍 プレビュー生成', use_container_width=True, type='prima
             # Discord送信ボタン
             if st.button('📤 Discord に送信', use_container_width=True, type='primary', key='send_discord'):
                 with st.spinner('送信中...'):
-                    try:
-                        if dr.send_message(text, output_path):
-                            st.success('✅ Discord に送信完了！')
-                        else:
-                            st.error('❌ Discord送信に失敗しました')
-                    except Exception as e:
-                        st.error(f'❌ エラー: {e}')
+                    success, message = dr.send_message(text, output_path)
+                    if success:
+                        st.success('✅ Discord に送信完了！')
+                    else:
+                        st.error(f'❌ Discord送信に失敗しました')
+                        st.write(f'詳細: {message}')
 
         finally:
             import os as _os
