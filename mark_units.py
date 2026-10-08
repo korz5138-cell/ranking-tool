@@ -5,7 +5,7 @@
     python mark_units.py --file 上大岡.xlsx --units 1,3,5,7 -o 上大岡_当たり.xlsx
 
     # pision API からデータを取得して Excel を作成し、色付け（PISION_API_KEY が必要）
-    python mark_units.py --hall プラザ上大岡 --date 2026-10-06 --units 1,3,5,7
+    python mark_units.py --hall プラザ上大岡 --date 2026-10-06 --units 1001,1003,1005,1007
 
     # 台番セルではなく行全体を色付け
     python mark_units.py --file 上大岡.xlsx --units 1,3,5 --row
@@ -100,13 +100,16 @@ def build_workbook_from_api(hall_name: str, target_date: str):
     ws.append(['台番', '機種名', '差枚', 'G数', 'BB', 'RB', 'ART'])
     for c in ws[1]:
         c.font = Font(bold=True)
-    for d in result.get('details', []):
+    details = result.get('details', [])
+    for d in details:
         model = d.get('model') or {}
-        dai = d.get('displayName')
-        dai = int(dai) if str(dai).isdigit() else dai
-        ws.append([dai, model.get('name'), d.get('diff'), d.get('games'),
+        # 台番は unitId（displayName には機種名が入る）
+        ws.append([d.get('unitId'), model.get('name'), d.get('diff'), d.get('games'),
                    d.get('bb'), d.get('rb'), d.get('art')])
     ws.column_dimensions['B'].width = 40
+    ids = [d['unitId'] for d in details if isinstance(d.get('unitId'), int)]
+    if ids:
+        print(f"{hall['name']} {target_date}: {len(ids)} 台（台番 {min(ids)}〜{max(ids)}）")
     return wb, hall['name']
 
 
